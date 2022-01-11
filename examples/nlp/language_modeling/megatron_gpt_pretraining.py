@@ -16,11 +16,15 @@ from omegaconf.omegaconf import OmegaConf, open_dict
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.timer import Timer
 from pytorch_lightning.plugins.environments.torchelastic_environment import TorchElasticEnvironment
-from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from torch.distributed.algorithms.ddp_comm_hooks.debugging_hooks import noop_hook
 
 from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDataConnector, NLPDDPPlugin
+from nemo.collections.nlp.parts.nlp_overrides import (
+    GradScaler,
+    NLPDataConnector,
+    NLPDDPPlugin,
+    PipelineMixedPrecisionPlugin,
+)
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import StatelessTimer, exp_manager
@@ -38,7 +42,9 @@ def main(cfg) -> None:
             init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
             growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
         )
-        plugins.append(NativeMixedPrecisionPlugin(precision=16, device='cuda', scaler=scaler))
+        plugins.append(PipelineMixedPrecisionPlugin(precision=16, device='cuda', scaler=scaler))
+    elif cfg.trainer.precision == 'bf16':
+        plugins.append(PipelineMixedPrecisionPlugin(precision='bf16', device='cuda'))
 
     if cfg.get('cluster_type', None) == 'BCP':
         plugins.append(TorchElasticEnvironment())

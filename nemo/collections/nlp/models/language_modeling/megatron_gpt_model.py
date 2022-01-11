@@ -108,15 +108,14 @@ class MegatronGPTModel(NLPModel):
                 self.prompt_table = set(self.cfg.existing_prompt_tags)
         self.setup_optimizer_param_groups()
 
-        if self.cfg.get('pipeline_model_parallel_size', 1) > 1:
-            if self.cfg.precision == 32:
-                self.dtype_for_pipeline_comm = None
-            elif self.cfg.precision == 16:
-                self.dtype_for_pipeline_comm = torch.half
-            elif self.cfg.precision == 'bf16':
-                self.dtype_for_pipeline_comm = torch.bfloat16
-            else:
-                raise ValueError('precision must be in [32, 16, "bf16"]')
+        if self.cfg.precision == 32:
+            self.autocast_dtype = None
+        elif self.cfg.precision == 16:
+            self.autocast_dtype = torch.half
+        elif self.cfg.precision == 'bf16':
+            self.autocast_dtype = torch.bfloat16
+        else:
+            raise ValueError('precision must be in [32, 16, "bf16"]')
 
     def model_provider_func(self, pre_process, post_process):
         """Model depends on pipeline paralellism."""
@@ -181,7 +180,7 @@ class MegatronGPTModel(NLPModel):
                 model=self.model,
                 forward_only=False,
                 tensor_shape=tensor_shape,
-                dtype=self.dtype_for_pipeline_comm,
+                dtype=self.autocast_dtype,
             )
         else:
             losses_reduced_per_micro_batch = forward_backward_no_pipelining(
@@ -279,6 +278,7 @@ class MegatronGPTModel(NLPModel):
                 buf.copy_(synced)
 
     def get_forward_output_and_loss_func(self):
+        @torch.autocast('cuda', dtype=self.autocast_dtype)
         def fwd_output_and_loss_func(batch, model):
             tokens, labels, loss_mask, attention_mask, position_ids = batch
             attention_mask = attention_mask[0:1]
@@ -310,7 +310,7 @@ class MegatronGPTModel(NLPModel):
                 model=self.model,
                 forward_only=True,
                 tensor_shape=tensor_shape,
-                dtype=self.dtype_for_pipeline_comm,
+                dtype=self.autocast_dtype,
             )
         else:
             losses_reduced_per_micro_batch = forward_backward_no_pipelining(
