@@ -109,7 +109,7 @@ class MegatronGPTModel(NLPModel):
         self.setup_optimizer_param_groups()
 
         if self.cfg.precision == 32:
-            self.autocast_dtype = None
+            self.autocast_dtype = torch.float
         elif self.cfg.precision == 16:
             self.autocast_dtype = torch.half
         elif self.cfg.precision == 'bf16':
